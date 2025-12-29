@@ -1,1 +1,13 @@
 pre_training/cov_matrices/
+
+# Exclude training example simulations
+post_training/Fig1_training_examples/simulation_1/
+post_training/Fig1_training_examples/simulation_2/
+post_training/Fig1_training_examples/simulation_3/
+
+# Exclude post-training dimensionality simulations
+post_training/Fig5_post_training_dimensionality/oscillations/simulation_1/
+post_training/Fig5_post_training_dimensionality/oscillations/simulation_2/
+
+post_training/Fig5_post_training_dimensionality/sequences/simulacion_1/
+post_training/Fig5_post_training_dimensionality/sequences/simulacion_2/
