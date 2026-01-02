@@ -24,7 +24,7 @@ nloop = 2000
 sigman = 1
 
 iout = np.array((0, N2, N-1))
-pqif_vector = [0, 1]
+pqif_vector = [0.25, 0.5, 0.75]
 
 gsyn_vect =[0]
 Iext = np.zeros((N, itmax))
@@ -210,7 +210,7 @@ for pqif in pqif_vector:
             vrest_vect = [None]
 
         for vrest in vrest_vect:
-            for seed in range(20):
+            for seed in range(20,50):
                 all_conditions.append((pqif, vt, vrest, seed))
 
 # OPCIÓN 1: Paralelización a nivel de condición (recomendada para muchas condiciones)
