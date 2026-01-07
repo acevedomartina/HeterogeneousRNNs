@@ -16,3 +16,5 @@ post_training/Fig5_post_training_dimensionality/sequences/simulacion_2/
 learning/oscillations/rprom/
 learning/oscillations/simulation_*/
 learning/sequences/simulation_*/
+simulations_*/
+learning/simulation_*/
