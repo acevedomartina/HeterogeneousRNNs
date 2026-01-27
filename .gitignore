@@ -23,4 +23,5 @@ learning/test_code_snippets.ipynb
 data_analysis/data/
 sequences.7z
 oscillations.7z
-
+simulacion_*
+learning/figures/
