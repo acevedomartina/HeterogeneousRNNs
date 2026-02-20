@@ -11,3 +11,14 @@ post_training/Fig5_post_training_dimensionality/oscillations/simulation_2/
 
 post_training/Fig5_post_training_dimensionality/sequences/simulacion_1/
 post_training/Fig5_post_training_dimensionality/sequences/simulacion_2/
+
+# Exclude simulation data after learning
+learning/oscillations/rprom/
+learning/oscillations/simulation_*/
+learning/sequences/simulation_*/
+simulations_*/
+simulation_*/
+learning/simulation_*/
+data_analysis/data/
+simulacion_*
+learning/figures/

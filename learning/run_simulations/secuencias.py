@@ -77,7 +77,7 @@ ftrain = 1                                # fraccón de neuronas a entrenar
 nloop  = 16                              # numero de loops, 0 pre-entramiento, ultimo: post-entrenamiento. Poner nloop=2 para no hacer aprendizaje
 nloop_train = 10                         #ultimo loop de entrenamiento
 
-cant_seed = 50
+cant_seed = 2
 
 
 
@@ -336,7 +336,7 @@ for pqif in [0, 0.25, 0.5, 0.75, 1]:  # Included all pqif compositions
             crear_archivo_parametros(filename_resultados, num_simulacion, nombre_carpeta, b, vt, vrest=vrest)
                 
 
-            cant_seed = 50
+            cant_seed = 2
 
             with open(csv_file_path, mode='a', newline='') as file:
                 writer = csv.writer(file)
