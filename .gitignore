@@ -23,3 +23,4 @@ data_analysis/data/
 simulacion_*
 learning/figures/
 test_code_snippets.ipynb
+data_analysis/saved_data/
