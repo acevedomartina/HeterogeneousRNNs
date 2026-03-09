@@ -24,3 +24,4 @@ simulacion_*
 learning/figures/
 test_code_snippets.ipynb
 data_analysis/saved_data/
+learning/firing_rate_files/
