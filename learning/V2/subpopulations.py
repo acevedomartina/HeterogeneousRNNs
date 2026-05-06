@@ -59,7 +59,7 @@ FIGURES_DIR.mkdir(parents=True, exist_ok=True)   # creates ./figures/ if needed
 # Choose path
 
 # IDUN
-base_path = Path(r"J:\new_target")
+# base_path = Path(r"J:\new_target")
 
 
 # Home
@@ -84,22 +84,48 @@ pqif_number = [0, 0.25, 0.5, 0.75, 1]
 
 quantifications = ["mean", "std"]
 # dynamics = ["sequences"]  
+# dynamics = ["oscillations", "sequences"]
 dynamics = ["oscillations"]
-dynamics = ["oscillations", "sequences"]
 
 seeds = range(50)
 
 def load_matrix(path):
     return np.genfromtxt(path, delimiter=',')
 
-def get_quadrants(W):
+def get_quadrants(W, pqif):
+    ''' 
+    Split into quadrants based on pqif. If homogenous, split into equal sizes (we can adjust this if we want different sizes later) 
+
+    Parameters
+    --------------
+    W :  np.ndarray
+        Connectivity matrix
+    pqif : float
+        fraction of QIF neurons, determines where to split the matrices
+    
+    Returns
+    --------------
+    list of np.ndarray
+        [Q1, Q2, Q3, Q4] where
+            Q1 = top‑left,
+            Q2 = top‑right,
+            Q3 = bottom‑left,
+            Q4 = bottom‑right.
+    '''
     N = W.shape[0]
-    h = N // 2
+
+    # Decide where to cut matrix
+    # h = N // 2  # If we want all to be equal sizes
+    if 0 < pqif < 1:
+        h = int(round(pqif * N))
+    else:
+        h = N // 2
+
     return [
-        W[:h, :h],
-        W[:h, h:],
-        W[h:, :h],
-        W[h:, h:]
+        W[:h, :h],  # top-left
+        W[:h, h:],  # top-right
+        W[h:, :h],  # bottom-left
+        W[h:, h:]  # bottom-right
     ]
 
 
@@ -141,7 +167,7 @@ for dyn in dynamics:  # If not both dynamics, change above in parameters
                     W11_masked = np.where(mask_zero, np.nan, W11)
                     
                     # Get quadrants from masked matrix
-                    quadrants = get_quadrants(W11_masked)
+                    quadrants = get_quadrants(W11_masked, pqif)
                     
                     # Containers for mean and standard deviation per quadrant
                     means = []
