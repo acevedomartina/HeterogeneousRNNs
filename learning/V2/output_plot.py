@@ -54,18 +54,98 @@ color_map_pqif[pqif_vector[-1]] = 'steelblue'
 
 # Path
 
-ONEDRIVE_BASE = Path(r"C:\Users\Silje\OneDrive\Dokumenter\mscneuroscience20242026\nevr3901\simulations_folder\may_simulations")
-ONEDRIVE_BASE.mkdir(parents=True, exist_ok=True)
+# --- File path handling
+SCRIPT_DIR = Path(__file__).resolve().parent  # .py
+# SCRIPT_DIR = Path.cwd()  # .ipynb
+FIGURES_DIR = SCRIPT_DIR / "figures"
+FIGURES_DIR.mkdir(parents=True, exist_ok=True)   # creates ./figures/ if needed
+
+# --- Base path
+# base_path = Path(r"J:\new_target")  # IDUN
+# base_path = Path(r"C:\Users\Silje\OneDrive\Dokumenter\mscneuroscience20242026\nevr3901\simulations_folder\may_simulations")  # home
+base_path = SCRIPT_DIR  # original
+base_path.mkdir(parents=True, exist_ok=True)
+
 
 # ------------------------------------------------------------
+
+# File
+
 
 # File
 
 sim=9
 pqif=0.5
 iloop=11
-df = pd.read_csv(ONEDRIVE_BASE / f"simulation_{sim}/simulation_{sim}_outputs/simulation_{sim}_outputs_pqif_{pqif}_iloop_{iloop}_seed_0.csv", header=None)
 
+quadrant_names = ["Q1", "Q2", "Q3", "Q4"]
+
+
+vrest = [-8.5, -12.3, -17, -22]
+slope = [14.44, 10.68, 8.65, 7.18]
+simulation_number = [i for i in range(1,5)]
+slope_qif = 10.74
+all_slopes = [14.44, 10.68, 10.74, 8.65, 7.18]
+pqif_number = [0, 0.25, 0.5, 0.75, 1]
+pqif_number = [0.5]
+
+quantifications = ["mean", "std"]
+# dynamics = ["sequences"]  
+# dynamics = ["oscillations", "sequences"]
+dynamics = ["oscillations"]
+
+seeds = range(2)
+
+def load(path):
+    return np.genfromtxt(path, delimiter=',')
+
+def slice_neurons(output, pqif):
+    '''
+    Slice output based on pqif. First pqif*N are QIF and remaining LIF.
+    '''
+
+    N = output.shape[0]
+
+
+    h = int(round(pqif * N))
+
+    # All rows (time), QIF and LIF
+    QIF = output[:, :h]  # up to QIF
+    LIF = output[:, h:]  # from LIF
+
+
+    return QIF, LIF
+
+for dyn in dynamics:
+    simulation_number = [i for i in range(1,5)] if dyn == "oscillations" else [i for i in range(9,13)]
+    for pqif in pqif_number:
+
+        for idx, f in zip(simulation_number, slope):
+
+            mean = []
+            std = []
+
+            for seed in seeds:
+                # qif_r = 
+
+
+                simulation_path = f"{base_path}\\simulation_{idx}\\simulation_{idx}_outputs"
+                # simulation_path = f"{base_path}\\{dyn}\\simulation_{idx}\\simulation_{idx}_outputs"
+
+                path = f"{simulation_path}\\simulation_{idx}_outputs_pqif_{pqif}_iloop_11_seed_{seed}.csv"
+
+                # df = pd.read_csv(path, header=None)
+
+
+                output = load(path)
+
+                QIF, LIF = slice_neurons(output, pqif)
+
+                # TODO This is not finished
+
+
+
+# Animation
 import matplotlib.animation as animation
 
 fig, ax = plt.subplots(figsize=(8, 4))
