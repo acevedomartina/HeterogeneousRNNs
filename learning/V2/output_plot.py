@@ -81,7 +81,7 @@ simulation_number = [i for i in range(1,5)]
 slope_qif = 10.74
 all_slopes = [14.44, 10.68, 10.74, 8.65, 7.18]
 pqif_number = [0, 0.25, 0.5, 0.75, 1]
-pqif_number = [0.25, 0.5, 0.75]
+# pqif_number = [0.25, 0.5, 0.75]
 
 # quantifications = ["mean", "std"]
 quantifications = ["mean"]
@@ -89,7 +89,21 @@ quantifications = ["mean"]
 # dynamics = ["oscillations"]
 dynamics = ["oscillations", "sequences"]
 
-seeds = range(2)
+seeds = range(10)
+
+# choose a small distance
+dx = 0.1 # half‑distance from the centre
+
+# centre of the two points (kept at 1.0 so the x‑axis still shows “1” and “2”)
+x_center = 1.0
+
+# actual positions that will be used for the error‑bars
+x_qif = x_center - dx          # ≈ 0.85
+x_lif = x_center + dx          # ≈ 1.15
+
+
+x_qif = 2          # ≈ 0.85
+x_lif = 3          # ≈ 1.15
 
 # ------------------------------------------------------------
 
@@ -164,140 +178,275 @@ for dyn in dynamics:  # If not both dynamics, change above in parameters
 
         fig, axs = plt.subplots(
         nrows=1,
-        ncols=3,
-        figsize=(20, 8),          
-        constrained_layout=True   
+        ncols=5,
+        figsize=(24, 8),          
+        constrained_layout=True,
+        sharex=False, sharey=True
         )
 
         for idx_pqif, pqif in enumerate(pqif_number):
 
-            ax = axs[idx_pqif]
+            ax = axs[idx_pqif]  # ax[0], ..., ax[4]
+
+            if pqif == 0:
+                draw_lif = True
+                draw_qif = False
+                ax.set_title(f"pqif={pqif} - Only LIF")            
+            elif pqif == 1:
+                draw_lif = False
+                draw_qif = True
+                ax.set_title(f"pqif={pqif} - Only QIF")
+            else:
+                draw_lif = True
+                draw_qif = True
+                ax.set_title(f"pqif={pqif} - Heterogeneous")
+
 
             for idx, f in zip(simulation_number, slope):
 
                 label = f
 
+                # Path to connectivity matrix
 
-                ###### CONNECTIVITY MATRIX
-
-                simulation_path = f"{base_path}\\simulation_{idx}\\simulation_{idx}_connectivity_matrix"
-                # simulation_path = f"{base_path}\\{dyn}\\simulation_{idx}\\simulation_{idx}_connectivity_matrix"
-
-
-                # simulation_path = f"{dyn}\\simulation_{idx}\\simulation_{idx}_connectivity_matrix"
+                sim_path_mat = f"{base_path}\\simulation_{idx}\\simulation_{idx}_connectivity_matrix"
+                # sim_path_mat = f"{base_path}\\{dyn}\\simulation_{idx}\\simulation_{idx}_connectivity_matrix"
+                # sim_path_mat = f"{dyn}\\simulation_{idx}\\simulation_{idx}_connectivity_matrix"
 
 
-                ###### OUTPUT FILES
+                # Output files
 
-                simulation_path_output = f"{base_path}\\simulation_{idx}\\simulation_{idx}_outputs"
-                # simulation_path_output = f"{base_path}\\{dyn}\\simulation_{sim}\\simulation_{sim}_outputs"
+                sim_path_output = f"{base_path}\\simulation_{idx}\\simulation_{idx}_outputs"
+                # sim_path_output = f"{base_path}\\{dyn}\\simulation_{sim}\\simulation_{sim}_outputs"
 
+                # Containers that will hold per-seed mean activity for the two populations
+                lif_means_per_seed = []
+                qif_means_per_seed = []
 
+                # Containers that will hold per-seed standard deviation for the two subpopulations
+                lif_std_per_seed = []
+                qif_std_per_seed = []
 
-                means_per_seed = []
-                stds_per_seed = [] 
-
-                global_means_per_seed = []
-                global_stds_per_seed = []
-
-                presyn_means_per_seed = []
-                presyn_stds_per_seed = []
 
                 for seed in seeds:
-                    # Paths
-
-                    path0 = f"{simulation_path}\\simulation_{idx}_connectivity_pqif_{pqif}_iloop_0_seed_{seed}"
-                    path11 = f"{simulation_path}\\simulation_{idx}_connectivity_pqif_{pqif}_iloop_11_seed_{seed}"
-                    
-                    path_output = f"{simulation_path_output}\\simulation_{idx}_outputs_pqif_{pqif}_iloop_11_seed_{seed}.csv"
 
 
+                    # Load the initialized matrix and the matrix after training (not used, but might be used later)
+                    # path0 = f"{sim_path_mat}\\simulation_{idx}_connectivity_pqif_{pqif}_iloop_0_seed_{seed}"
+                    # path11 = f"{sim_path_mat}\\simulation_{idx}_connectivity_pqif_{pqif}_iloop_11_seed_{seed}"
+                    # W0 = load_matrix(path0)
+                    # W11 = load_matrix(path11)
+                    # mask_zero = np.isclose(W0, 0.0)
+                    # W11_masked = np.where(mask_zero, np.nan, W11)
+                    # Assign QIF and LIF as presynaptic neurons to correct quadrants
+                    # presynaptic_neurons = pre_post(QIF, LIF)  # Becomes a list 
+                    
 
-                    # Load the initialized matrix and the matrix after training
-                    W0 = load_matrix(path0)
-                    W11 = load_matrix(path11)
-                    
-                    # Mask zeros
-                    mask_zero = np.isclose(W0, 0.0)
-                    W11_masked = np.where(mask_zero, np.nan, W11)
-                    
-                    # Get quadrants from masked matrix
-                    quadrants = get_quadrants(W11_masked, pqif)
-                    
+                    # ------------------------------------------------------------
+
                     # Load output matrix
+                    path_output = f"{sim_path_output}\\simulation_{idx}_outputs_pqif_{pqif}_iloop_11_seed_{seed}.csv"
                     output = load_matrix(path_output)
 
                     # Assign portions of output matrix to QIF and LIF variables
                     QIF, LIF = slice_neurons(output, pqif)
 
-                    # Assign QIF and LIF as presynaptic neurons to correct quadrants
-                    presynaptic_neurons = pre_post(QIF, LIF)  # Becomes a list 
+
+                    # ------------------------------------------------------------
+
+                    # Compute the population mean (time‑averaged, then neuron‑averaged)
+                    #   mean over time, shape (neurons,)
+                    mean_time_QIF = np.nanmean(QIF, axis=0)   # size = n_QIF
+                    mean_time_LIF = np.nanmean(LIF, axis=0)   # size = n_LIF
+
+                    # mean over neurons, become a scalar for that config
+                    pop_mean_QIF = np.nanmean(mean_time_QIF) if mean_time_QIF.size > 0 else np.nan
+                    pop_mean_LIF = np.nanmean(mean_time_LIF) if mean_time_LIF.size > 0 else np.nan
+
+                    qif_means_per_seed.append(pop_mean_QIF)
+                    lif_means_per_seed.append(pop_mean_LIF)
+
+                    # Compute the standard deviation on the time‑averaged array
+
+                    # std over neurons, become a scalar for that config
+                    pop_std_QIF = np.nanstd(mean_time_QIF, ddof=1) if mean_time_QIF.size > 0 else np.nan
+                    pop_std_LIF = np.nanstd(mean_time_LIF, ddof=1) if mean_time_LIF.size > 0 else np.nan
+
+                    qif_std_per_seed.append(pop_std_QIF)
+                    lif_std_per_seed.append(pop_std_LIF)
 
 
-                    # Containers for mean and standard deviation for outputs
-                    means_presyn = []
-                    stds_presyn = []
+                # -----------------------------------------------------------------
 
-                    neuron_means_per_quadrant = []
+                # Collapse across seeds, to get mean +- std (error‑bars) of the MEAN 
 
-                    
-                    for Q, presyn in zip(quadrants, presynaptic_neurons):
+                qif_means_per_seed = np.array(qif_means_per_seed, dtype=float)
+                lif_means_per_seed = np.array(lif_means_per_seed, dtype=float)
 
-                        # Take mean and standard deviation of outputs for presynaptic neurons
-                        # average over time for each neuron → (n_pre,)
+                # Standard‑error is the sample standard deviation (ddof=1)
+                qif_mean_mean  = np.nanmean(qif_means_per_seed) if qif_means_per_seed.size > 0 else np.nan
+                qif_std_mean   = np.nanstd (qif_means_per_seed, ddof=1) if qif_means_per_seed.size > 0 else np.nan
 
-                        neuron_time_means = np.nanmean(presyn, axis=0)
-
-                        # average over the neurons belonging to this quadrant → scalar
-                        neuron_means = np.nanmean(neuron_time_means)
-
-                        # store the scalar
-                        neuron_means_per_quadrant.append(neuron_means)
-
-
-                    presyn_means_per_seed.append(neuron_means_per_quadrant)
-
+                lif_mean_mean  = np.nanmean(lif_means_per_seed) if lif_means_per_seed.size > 0 else np.nan
+                lif_std_mean   = np.nanstd (lif_means_per_seed, ddof=1) if lif_means_per_seed.size > 0 else np.nan
                 
 
                 # ------------------------------------------------------------
 
+                # Collapse across seeds, to get mean +- std (error‑bars) of the STD 
+
+                qif_std_per_seed = np.array(qif_std_per_seed, dtype=float)
+                lif_std_per_seed = np.array(lif_std_per_seed, dtype=float)
+
+                # Standard‑error is the sample standard deviation (ddof=1)
+                qif_mean_std  = np.nanmean(qif_std_per_seed) if qif_std_per_seed.size > 0 else np.nan
+                qif_std_std   = np.nanstd (qif_std_per_seed, ddof=1) if qif_std_per_seed.size > 0 else np.nan
+
+                lif_mean_std  = np.nanmean(lif_std_per_seed) if lif_std_per_seed.size > 0 else np.nan
+                lif_std_std   = np.nanstd (lif_std_per_seed, ddof=1) if lif_std_per_seed.size > 0 else np.nan
+
+                # ------------------------------------------------------------
+
+
                 # Collapse presynaptic activity across seeds
 
-                presyn_means_per_seed = np.array(presyn_means_per_seed) # convert to numpy
-                mean_presyn_per_quadrant = np.mean(presyn_means_per_seed, axis=0)  # means for each quadrant
-                stds_presyn_per_quadrant = np.std(presyn_means_per_seed, axis=0, ddof=1)  # std to get errorbars
+                # presyn_means_per_seed = np.array(presyn_means_per_seed) # convert to numpy
+                # mean_presyn_per_quadrant = np.mean(presyn_means_per_seed, axis=0)  # means for each quadrant
+                # stds_presyn_per_quadrant = np.std(presyn_means_per_seed, axis=0, ddof=1)  # std to get errorbars
 
 
 
-                # Plotting loop
+                # ------------------------------------------------------------
 
-                if pqif == 1:
-                    # color = 'steelblue'
+                # Formatting
 
-                    if idx != simulation_number[0]:  
-                        # only take the first instance of QIF, since homogenous QIF does not change per simulation outside of variance
-                        # also to not have more seeds for QIF than the other cases
-                        continue 
+                # if pqif == 1:
+                #     # color = 'steelblue'
 
-                color=(color_map_slope[f] if pqif != 1 else 'steelblue')
-                y = mean_presyn_per_quadrant
-                yerror = stds_presyn_per_quadrant
-                label = f"{f}"
+                #     if idx != simulation_number[0]:  
+                #         # only take the first instance of QIF, since homogenous QIF does not change per simulation outside of variance
+                #         # also to not have more seeds for QIF than the other cases
+                #         continue 
+
+                col=(color_map_slope[f] if pqif != 1 else 'steelblue')
+                # y = mean_presyn_per_quadrant
+                # yerror = stds_presyn_per_quadrant
+                # label = f"{f}"
+
+                if dyn == "oscillations":
+                    fillstyle='full'
+                else:
+                    fillstyle='none'
+
+
+
+                # ------------------------------------------------------------
+
+                # Plotting
+
+                # ---- QIF -------------------------------------------------------
+                # if draw_qif:
+                #     # Only the first simulation should appear 
+                #     label_qif = 'QIF' if idx == simulation_number[0] else None
+                #     ax.errorbar(
+                #         x_qif,
+                #         qif_mean_mean,
+                #         yerr=qif_std_mean,
+                #         fmt='o',
+                #         capsize=5,
+                #         color='steelblue',
+                #         elinewidth=1.2,
+                #         markersize=10,
+                #         fillstyle=fillstyle,
+                #         label=label_qif,
+                #     )
+
+                # ---- LIF -------------------------------------------------------
+                if draw_lif:
+                    # Legend entry only once per slope (and only for the mixed panels)
+                    label_lif = (f'{f}' if (pqif not in (0, 1) and idx == simulation_number[0])
+                                 else None)
+                    ax.errorbar(
+                        x_lif,
+                        lif_mean_mean,
+                        yerr=lif_std_mean,
+                        fmt='o',
+                        capsize=5,
+                        color=col,
+                        elinewidth=1.2,
+                        markersize=10,
+                        fillstyle=fillstyle,
+                        label=label_lif,
+                    )
+
+                    ax.axhline(lif_mean_mean, color=col, alpha=0.2)
+
+            # QIF outside
+            if draw_qif:
+                    # Only the first simulation should appear 
+                    label_qif = 'QIF' if idx == simulation_number[0] else None
+                    ax.errorbar(
+                        x_qif,
+                        qif_mean_mean,
+                        yerr=qif_std_mean,
+                        fmt='o',
+                        capsize=5,
+                        color='steelblue',
+                        elinewidth=1.2,
+                        markersize=10,
+                        fillstyle=fillstyle,
+                        label=label_qif,
+                    )
+
+                    ax.axhline(qif_mean_mean, color='steelblue', alpha=0.2)
+
+                # if idx == simulation_number[0]:
+                #     ax.errorbar(
+                #         x_qif,                                        # x‑position for QIF
+                #         y[0],                                     # mean value (QIF)
+                #         yerr=yerror[0],                           # std‑error (QIF)
+                #         fmt='o',
+                #         capsize=5,
+                #         color='steelblue',                        # QIF is always steel‑blue
+                #         elinewidth=1.2,
+                #         markersize=10,
+                #         fillstyle=fillstyle,
+                #         label='QIF'                               # legend only for first sim
+                #     )
                 
-                ax.errorbar(quadrant_names, y, yerr=yerror, capsize=5, color=color, elinewidth=1.2, markersize=6, label=label)
+                # ax.errorbar(
+                #     x_lif,                                            # x‑position for LIF
+                #     y[1],                                         # mean value (LIF)
+                #     yerr=yerror[1],                               # std‑error (LIF)
+                #     fmt='o',
+                #     capsize=5,
+                #     color=color_map_slope[f],
+                #     elinewidth=1.2,
+                #     markersize=10,
+                #     fillstyle=fillstyle,
+                #     label=f'{f}' if (pqif not in (0, 1) and idx == simulation_number[0]) else None
+                # )
+                
+                # ax.errorbar(quadrant_names[:2], y[:2], fmt='o', yerr=yerror[:2], capsize=5, color=color, elinewidth=1.2, markersize=6, label=label)
                     
 
-            ax.set_xlabel("Quadrant")
-            ax.set_ylabel("Presynaptic activity (mean +- std)")
+            ax.set_xlabel("Presynaptic neuron")
             ax.set_title(f"pqif: {pqif}")
             ax.set_box_aspect(1)
+            ax.set_xlim(1, 4)
+            yticks = np.arange(start=0.18, stop=0.62, step=0.1)
             ax.set_ylim(0.18, 0.62)
+            ax.set_yticks(yticks)
+
+            if idx_pqif == 0:
+                ax.set_ylabel("r_j (mean +- std)")
         fig_path = FIGURES_DIR / f"{dyn}_output_subpopulations.svg"
         plt.savefig(fig_path, dpi=300)
         print(f"Figure saved in '{fig_path}'")
         # plt.suplots_adjust(hspace=None)
-        plt.suptitle(f"{dyn.capitalize()}: Mean +- $\sigma$ of output of presynaptic neuron per quadrant", fontsize=20, weight='bold')
+        plt.suptitle(f"{dyn.capitalize()}: Mean +- $\sigma$ of output of presynaptic neuron", fontsize=20, weight='bold')
+        plt.show()
         plt.legend()
+
 
 
 
