@@ -27,3 +27,6 @@ data_analysis/saved_data/
 learning/firing_rate_files/
 learning/spikes_after_learning/
 learning/omit_zero/figures_omitzero/
+learning/__pycache__/
+data_analysis/figures_analysis/
+learning/figures_all/
