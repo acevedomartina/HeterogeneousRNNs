@@ -1,32 +1,4 @@
-pre_training/cov_matrices/
-
-# Exclude training example simulations
-post_training/Fig1_training_examples/simulation_1/
-post_training/Fig1_training_examples/simulation_2/
-post_training/Fig1_training_examples/simulation_3/
-
-# Exclude post-training dimensionality simulations
-post_training/Fig5_post_training_dimensionality/oscillations/simulation_1/
-post_training/Fig5_post_training_dimensionality/oscillations/simulation_2/
-
-post_training/Fig5_post_training_dimensionality/sequences/simulacion_1/
-post_training/Fig5_post_training_dimensionality/sequences/simulacion_2/
-
-# Exclude simulation data after learning
-learning/oscillations/rprom/
-learning/oscillations/simulation_*/
-learning/sequences/simulation_*/
-simulations_*/
-simulation_*/
-learning/simulation_*/
-data_analysis/data/
-simulacion_*
-learning/figures/
-test_code_snippets.ipynb
-data_analysis/saved_data/
-learning/firing_rate_files/
-learning/spikes_after_learning/
-learning/omit_zero/figures_omitzero/
-learning/__pycache__/
-data_analysis/figures_analysis/
-learning/figures_all/
+other/
+structured_connectivity/tests.ipynb
+structured_connectivity/detect_spikes.ipynb
+structured_connectivity/simulations/1*
