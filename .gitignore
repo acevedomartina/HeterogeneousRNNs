@@ -1,24 +1,12 @@
-pre_training/cov_matrices/
+other/
+structured_connectivity/tests.ipynb
+structured_connectivity/detect_spikes.ipynb
+structured_connectivity/simulations/1*
+tests/
+learning/data/
 
-# Exclude training example simulations
-post_training/Fig1_training_examples/simulation_1/
-post_training/Fig1_training_examples/simulation_2/
-post_training/Fig1_training_examples/simulation_3/
-
-# Exclude post-training dimensionality simulations
-post_training/Fig5_post_training_dimensionality/oscillations/simulation_1/
-post_training/Fig5_post_training_dimensionality/oscillations/simulation_2/
-
-post_training/Fig5_post_training_dimensionality/sequences/simulacion_1/
-post_training/Fig5_post_training_dimensionality/sequences/simulacion_2/
-
-# Exclude simulation data after learning
-learning/oscillations/rprom/
-learning/oscillations/simulation_*/
-learning/sequences/simulation_*/
-simulations_*/
-simulation_*/
-learning/simulation_*/
-data_analysis/data/
-simulacion_*
-learning/figures/
+# data analysis
+data_analysis/
+figures_analysis
+data_analysis/data_generated/
+data_analysis/analysis_tests.ipynb
