@@ -4,7 +4,7 @@
 
 | File | Description |
 |---|---|
-| `snn_core.py` | Core functions shared by the scripts: `dynamics`, `detect`, `evolution`, `initialize_neurons`, `initialize_connectivity_matrix`, `initialize_training`, `currents`. No side effects on import. |
+| `snn_core.py` | Core functions shared by the scripts: `dynamics`, `detect`, `evolution`, `initialize_neurons`, `initialize_connectivity_matrix`, `initialize_training`, `currents`. |
 | `run_simulations.py` | Trains networks (several seeds and QIF/LIF proportions) and saves connectivity, inputs and outputs. |
 | `run_sweep.py` | Parameter sweep over initial connectivity (`gsyn`) and current amplitudes. |
 | `run_average_connectivity_dynamics.py` | Averages the trained connectivity over seeds and runs the dynamics with the averaged matrix. |
