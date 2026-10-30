@@ -11,7 +11,6 @@ import numpy as np
 from joblib import Parallel, delayed
 
 from simulation import (
-    generate_external_current,
     run_single_seed,
     currents,
 )

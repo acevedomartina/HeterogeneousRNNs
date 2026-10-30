@@ -29,29 +29,6 @@ from storage import (
 
 # Initialization
 
-
-# def initialize_neurons(N, rng):
-#     """
-#     Initialize neuron states.
-
-#     Returns
-#     ---
-#     x : ndarray
-#         Initial membrane state / phase.
-
-#     r : ndarray
-#         Initial neuronal output.
-
-#     nspike : ndarray
-#         Spike counts.
-#     """
-
-#     x = rng.uniform(size=N) * 2 * np.pi
-#     r = np.zeros(N)
-#     nspike = np.zeros(N)
-
-#     return x, r, nspike
-
 def initialize_neurons(cfg, nqif, rng, vt, vreset):
     """Initialize QIF phases and LIF voltages in their respective state spaces."""
     x = np.zeros(cfg.N)
@@ -64,16 +41,13 @@ def initialize_neurons(cfg, nqif, rng, vt, vreset):
     return x, r, nspike
 
 
-def initialize_connectivity_matrix(N, p, gsyn, rng):
-    """
-    Initialize random recurrent connectivity.
 
-    Preserves the original connectivity initialization:
-        - Sparse random connections
-        - Gaussian weights
-        - No self-connections
-        - Weight scaling by gsyn / sqrt(p*N)
-        - Zero mean over nonzero connections in each row
+def initialize_connectivity_matrix(N, p, gsyn, rng, allow_self_connections=False,):
+    """
+    Initialize recurrent connectivity.
+
+    When allow_self_connections is False, the diagonal is zero.
+    When True, diagonal connections are initialized and trainable.
     """
 
     w = sparse.random(
@@ -82,21 +56,21 @@ def initialize_connectivity_matrix(N, p, gsyn, rng):
         density=p,
         random_state=rng,
         data_rvs=lambda n: rng.standard_normal(n),
-    ).todense()
+    ).toarray()
 
-    np.fill_diagonal(w, 0)
+    if not allow_self_connections:
+        np.fill_diagonal(w, 0.0)
 
     w *= gsyn / np.sqrt(p * N)
 
     for i in range(N):
+        indices = np.flatnonzero(w[i])
 
-        indices = np.where(w[i, :])[1]
+        if indices.size > 0:
+            w[i, indices] -= np.mean(w[i, indices])
 
-        if len(indices) > 0:
-
-            mean_weight = np.sum(w[i, indices]) / len(indices)
-
-            w[i, indices] -= mean_weight
+    if not allow_self_connections:
+        np.fill_diagonal(w, 0.0)
 
     return w
 
@@ -123,42 +97,17 @@ def initialize_training(N, w, alpha):
 
     return P, idx
 
+def initialize_training_shared(N, alpha):
+    return np.eye(N, dtype=np.float64) / alpha
 
-# def generate_external_current(cfg, rng):
-#     """
-#     Generate external stimulation current.
-
-#     The current is applied during the first cfg.itstim
-#     timesteps, matching the original implementation.
-
-#     This function does not decide whether the current
-#     is shared between experiments, conditions, or seeds.
-#     """
-
-#     Iext = np.zeros((cfg.N, cfg.itmax))
-
-#     Ibac = (cfg.current_amplitude* (2 * rng.uniform(size=cfg.N) - 1))
-
-#     Iext[:, :cfg.itstim] = Ibac[:, None]
-
-#     return Iext
-
-def generate_external_current(cfg, rng):
-    """Generate external currents from a configurable uniform interval."""
-    Iext = np.zeros((cfg.N, cfg.itmax))
-    Ibac = cfg.current_amplitude * (cfg.IEXT_LOW_FRAC + (cfg.IEXT_HIGH_FRAC - cfg.IEXT_LOW_FRAC) * rng.uniform(size=cfg.N))
-    Iext[:, :cfg.itstim] = Ibac[:, None]
-    return Iext
 
 def currents(cfg, rng):
-    """Updated currents() function from the update from M"""
+    """Updated currents() function"""
     Iext=np.zeros((cfg.N, cfg.itmax))
     # NOW: (CAMBIO) Sample initial currents from a configurable signed/asymmetric interval.
     Ibac = cfg.current_amplitude * (cfg.IEXT_LOW_FRAC+ (cfg.IEXT_HIGH_FRAC - cfg.IEXT_LOW_FRAC) * rng.uniform(size=cfg.N))
     Iext[:, :cfg.itstim] = Ibac[:, None]  # Vectorized assignment
     return Iext
-
-
 
 
 # Neuronal dynamics
@@ -176,11 +125,9 @@ def detect(x, xnew, rnew, nspike, nqif, cfg, vt, vreset):
     """
     Detect spikes and update neuronal output.
 
-    LIF neurons:
-        Detect threshold crossing and reset state.
+    LIF neurons: Detect threshold crossing and reset state.
 
-    QIF neurons:
-        Detect crossing of phase pi.
+    QIF neurons: Detect crossing of phase pi.
     """
 
     b = cfg.b
@@ -239,38 +186,26 @@ def rls_update_numba(P_i, ri, error_i):
     """
     JIT-compiled RLS update for one neuron.
     """
-
     n = ri.shape[0]
-
     k = np.empty(n, dtype=np.float64)
 
     for j in range(n):
-
         value = 0.0
-
         for m in range(n):
             value += P_i[j, m] * ri[m]
-
         k[j] = value
-
     den = 1.0
 
     for j in range(n):
         den += ri[j] * k[j]
-
     inv_den = 1.0 / den
-
     for j in range(n):
         for m in range(n):
             P_i[j, m] -= k[j] * k[m] * inv_den
-
     dw = np.empty(n, dtype=np.float64)
-
     scale = error_i * inv_den
-
     for j in range(n):
         dw[j] = scale * k[j]
-
     return dw
 
 
@@ -291,27 +226,18 @@ def learning(
     """
 
     N = cfg.N
-
-    prediction = np.asarray(
-        w @ r.reshape(N, 1)
-    ).ravel()
-
+    prediction = np.asarray(w @ r.reshape(N, 1)).ravel()
     error = target[:, it] - prediction
 
     if cfg.save_dw:
         w1 = np.zeros(w.shape)
 
     for i in range(N):
-
         indices = idx[i]
         ri = r[indices]
 
-        dw = rls_update_numba(
-            P[i], ri, error[i]
-        )
-
+        dw = rls_update_numba(P[i], ri, error[i])
         w[i, indices] += dw
-
         if cfg.save_dw:
             w1[i, indices] = dw
 
@@ -321,27 +247,84 @@ def learning(
         and dw_buffer is not None
         and it % 10 == 0
     ):
+        modt_value = (
+            (it - cfg.itstim)
+            + (iloop - 1)
+            * (cfg.itmax - cfg.itstim)
+        )
+        modw_value = np.log(np.linalg.norm(w1) / norm_w0)
+        dw_buffer.append((modt_value, modw_value))
+    return w, P
 
+def initialize_shared_rls(N, alpha):
+    """
+    Initialize one shared RLS inverse correlation matrix.
+    """
+    return np.eye(N, dtype=np.float64) / alpha
+
+
+def learning_shared(
+    it,
+    iloop,
+    w,
+    r,
+    P,
+    target,
+    norm_w0,
+    dw_buffer,
+    cfg,
+):
+    """
+    Apply shared-matrix RLS to all recurrent weights.
+
+    Optionally prevent self-connections from being learned.
+    """
+
+    prediction = w @ r
+    error = target[:, it] - prediction
+
+    # Shared RLS gain
+    k = P @ r
+    denominator = 1.0 + r @ k
+    gain = k / denominator
+
+    # Update shared inverse correlation matrix
+    P -= np.outer(k, gain)
+
+    # Update all recurrent weights simultaneously
+    dw = np.outer(error, gain)
+
+    if not cfg.allow_self_connections:
+        np.fill_diagonal(dw, 0.0)
+
+    w += dw
+
+    # Preserve existing weight-change tracking
+    if (
+        cfg.save_dw
+        and dw_buffer is not None
+        and it % 10 == 0
+    ):
         modt_value = (
             (it - cfg.itstim)
             + (iloop - 1)
             * (cfg.itmax - cfg.itstim)
         )
 
-        modw_value = np.log(
-            np.linalg.norm(w1) / norm_w0
+        dw_norm = np.linalg.norm(dw)
+
+        modw_value = (
+            np.log(dw_norm / norm_w0)
+            if dw_norm > 0 and norm_w0 > 0
+            else -np.inf
         )
 
-        dw_buffer.append(
-            (modt_value, modw_value)
-        )
+        dw_buffer.append((modt_value, modw_value))
 
     return w, P
 
-
-
-# Network motifs (optional analysis)
-
+# Network motifs
+# This belongs as part of analysis functions, there is not really a need to compute this at the simulation level
 
 def motifs(w):
     """
@@ -445,10 +428,6 @@ def run_single_seed(
         cfg.network_seed(seed)
     )
 
-    # nqif = int(N * pqif)
-
-    # x, r, nspike = initialize_neurons(N, rng)
-
     nqif = int(N * pqif)
 
     x, r, nspike = initialize_neurons(
@@ -464,15 +443,29 @@ def run_single_seed(
         p=cfg.p,
         gsyn=cfg.gsyn,
         rng=rng,
+        allow_self_connections=cfg.allow_self_connections,
     )
 
     norm_w0 = np.linalg.norm(w)
 
-    P, idx = initialize_training(
-        N=N,
-        w=w,
-        alpha=cfg.alpha,
-    )
+    if cfg.learning_algorithm == "shared_rls":
+        P = initialize_shared_rls(
+            N=N,
+            alpha=cfg.alpha,
+        )
+        idx = None
+
+    elif cfg.learning_algorithm == "independent_rls":
+        P, idx = initialize_training(
+            N=N,
+            w=w,
+            alpha=cfg.alpha,
+        )
+
+    else:
+        raise ValueError(
+            f"Unknown learning algorithm: {cfg.learning_algorithm}"
+        )
 
     
     # Result buffers
@@ -555,19 +548,32 @@ def run_single_seed(
                 0 < iloop <= cfg.nloop_train
                 and it >= cfg.itstim
             ):
+                if cfg.learning_algorithm == "shared_rls":
+                    w, P = learning_shared(
+                        it=it,
+                        iloop=iloop,
+                        w=w,
+                        r=r,
+                        P=P,
+                        target=target,
+                        norm_w0=norm_w0,
+                        dw_buffer=dw_buffer,
+                        cfg=cfg,
+                    )
 
-                w, P = learning(
-                    it=it,
-                    iloop=iloop,
-                    w=w,
-                    r=r,
-                    P=P,
-                    idx=idx,
-                    target=target,
-                    norm_w0=norm_w0,
-                    dw_buffer=dw_buffer,
-                    cfg=cfg,
-                )
+                else:
+                    w, P = learning(
+                        it=it,
+                        iloop=iloop,
+                        w=w,
+                        r=r,
+                        P=P,
+                        idx=idx,
+                        target=target,
+                        norm_w0=norm_w0,
+                        dw_buffer=dw_buffer,
+                        cfg=cfg,
+                    )
 
         
         # Save selected activity loops

@@ -1,10 +1,8 @@
 
 """Central configuration for network training experiments.
-
-Edit the defaults in Config, then create one instance with cfg = Config().
-No files are written when this module is imported.
-
-Values here are defaults but can be overwritten
+Default values are used if not overwritten in main.py
+cfg = Config()
+By default it doesn't parallelize over anything, set this in main
 """
 
 from dataclasses import asdict, dataclass, field
@@ -31,7 +29,6 @@ class Config:
     )
     p: float = 0.3
     gsyn: float = 0.5
-    alpha: float = 0.25
 
     
     # Dynamics
@@ -51,13 +48,17 @@ class Config:
     IEXT_HIGH_FRAC: float = 1.0
     
 
-    
+
     # Training
     
+    alpha: float = 0.25
     nloop: int = 16
     nloop_train: int = 10
     cant_seed: int = 20
     ftrain: float = 1.0
+
+    learning_algorithm: str = "independent_rls"  # or shared_rls
+    allow_self_connections: bool = False
 
     
     # Oscillation targets
@@ -87,7 +88,7 @@ class Config:
     
     parallelize_seed: int = 1
     parallelize_pqif: int = 1
-    parallelize_target_conditions: int = 50
+    parallelize_target_conditions: int = 1
 
     
     # Saving
@@ -163,7 +164,7 @@ class Config:
         raise ValueError(f"Unknown target_dynamics: {self.target_dynamics!r}")
 
     def sequence_seed(self,condition_id: int,num_simulation: int,pqif: float,seed: int,) -> np.random.SeedSequence:
-        """When the ordering of neurons in the sequence is not shared across seeds, this function is used to handle reproducible randomization and independent of network initializatin."""
+        """When the ordering of neurons in the sequence is not shared across seeds, this function is used to handle reproducible randomization."""
         return np.random.SeedSequence([
             self.master_seed,
             condition_id,
@@ -226,6 +227,24 @@ class Config:
             raise ValueError("Parallelize at only one level: seed, pqif or target conditions")
         if not isinstance(self.shared_sequence_order, bool):
             raise ValueError("shared_sequence_order must be a boolean")
+        if self.learning_algorithm not in {
+            "independent_rls",
+            "shared_rls",
+        }:
+            raise ValueError(
+                "learning_algorithm must be "
+                "'independent_rls' or 'shared_rls'"
+            )
+
+        if not isinstance(self.allow_self_connections, bool):
+            raise ValueError(
+                "allow_self_connections must be a boolean"
+            )
+
+        if self.learning_algorithm == "shared_rls" and self.p != 1.0:
+            raise ValueError(
+                "shared_rls currently requires p=1.0"
+            )
 
     def to_metadata(self) -> dict[str, Any]:
         """JSON-serializable snapshot of all parameters and derived settings."""

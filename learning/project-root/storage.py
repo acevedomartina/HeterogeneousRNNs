@@ -27,26 +27,26 @@ import pandas as pd
 # Experiment initialization
 
 
-def initialize_experiment(cfg):
+def initialize_experiment(cfg, parent_dir=None):
     """
     Create the root directory for a new experiment.
 
     Aborts if the experiment already exists, preventing overwriting.
     """
-
-    project_dir = Path(__file__).resolve().parent
-    experiment_dir = project_dir / "results" / cfg.sim_name
-
     cfg.validate()
+
+    if parent_dir is None:
+        project_dir = Path(__file__).resolve().parent
+        parent_dir = project_dir / "results"
+
+    experiment_dir = Path(parent_dir) / cfg.sim_name
 
     if experiment_dir.exists():
         raise FileExistsError(
-            f"Experiment directory already exists: {experiment_dir}\n"
-            "Aborting to prevent overwriting existing results."
+            f"Experiment directory already exists: {experiment_dir}"
         )
 
     experiment_dir.mkdir(parents=True)
-
     return experiment_dir
 
 

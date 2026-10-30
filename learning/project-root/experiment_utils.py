@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import json
 import numpy as np
 import pandas as pd
+import time
 
 
 def find_experiment(name, start_dir=None):
@@ -19,7 +20,27 @@ def find_experiment(name, start_dir=None):
 
 
 class Experiment:
-    """Access saved experiment metadata, conditions, and file paths."""
+    """
+    Handles experiment metadata, loading saved data, coordinate transformations in
+    the connectivity matrices, and others.
+    Access saved experiment metadata, conditions, and file paths.
+
+    
+
+    This is a work in progress. I want here to possibly add these methods:
+
+        load_sequence_positions() : retrieve shared or seed-specific sequence assignment
+        order_neurons() : transform activity from original neuron order to sequence order
+        restore_neurons() : reverse that transformation
+        order_connectivity() : reorder both axes of a connectivity matrix to sequence order
+        restore_connectivity() : reverse that (transform back to original neuron order)
+        load_connectivity() : load a connectivity matrix
+        average_connectivity() : average matrices across seeds
+        load_external_current() : load saved stimulus for a given pqif
+
+    Because these are used a lot in analysis.
+    
+    """
 
     def __init__(self, directory):
         self.directory = Path(directory).resolve()
@@ -146,6 +167,34 @@ class Experiment:
         return float(self.configs[sim - 1]["vreset"])
 
     @staticmethod
+    def load_npz_with_retry(path, key, retries=3, delay=1):
+        """Retry loading an NPZ file if it temporarily cannot be found.
+        Sometimes when loading a large number of files from the cluster,
+        a FileNotFound error occurs even though the file exist. This 
+        is a transient thing and this function retries to load it.
+        Can be used in functions by replacing (for example)
+
+            with np.load(path) as data:
+                activity = data[name].copy()
+
+        with
+
+            activity = self.load_npz_with_retry(path, name)
+        
+        """
+        import time
+
+        for attempt in range(retries):
+            try:
+                with np.load(path) as data:
+                    return data[key].copy()
+            except FileNotFoundError:
+                if attempt == retries - 1:
+                    raise
+                print(f"Retrying {path.name} (attempt {attempt + 2}/{retries})")
+                time.sleep(delay)
+
+    @staticmethod
     def order_neurons(activity, sequence_position):
         """Sort neurons by their sequence positions."""
         return activity[np.argsort(sequence_position), :]
@@ -221,8 +270,9 @@ class Experiment:
                 pqif=pqif, seed=seed, iloop=iloop
             )
 
-            with np.load(path) as data:
-                activity = data[name].copy()
+            # with np.load(path) as data:  # Original way to load activity
+            #     activity = data[name].copy()
+            activity = self.load_npz_with_retry(path, name)  # using the helper
 
             if activity.shape == (self.itmax, self.N):
                 activity = activity.T
@@ -238,3 +288,137 @@ class Experiment:
             activities.append(activity)
 
         return tuple(activities)
+
+
+
+class ExperimentSweep:
+    """
+    Load and iterate over experiments organized as:
+
+    sweep/
+        initializations.csv
+        initialization_0/
+            1000_sequences/
+            1001_sequences/
+        initialization_1/
+            ...
+    """
+
+    def __init__(self, directory):
+        self.directory = Path(directory).resolve()
+        self.initializations = pd.read_csv(
+            self.directory / "initializations.csv"
+        )
+
+        self.experiments = []
+
+        for initialization_dir in sorted(
+            self.directory.glob("initialization_*")
+        ):
+            if not initialization_dir.is_dir():
+                continue
+
+            initialization_id = int(
+                initialization_dir.name.split("_")[-1]
+            )
+
+            for experiment_dir in sorted(initialization_dir.iterdir()):
+                if not (experiment_dir / "experiment.json").is_file():
+                    continue
+
+                exp = Experiment.load(experiment_dir)
+
+                self.experiments.append(
+                    SimpleNamespace(
+                        initialization=initialization_id,
+                        master_seed=exp.master_seed,
+                        exp=exp,
+                    )
+                )
+
+    @classmethod
+    def load(cls, directory):
+        return cls(directory)
+
+    def iter_params(self, *names, **filters):
+        """
+        Iterate over sweep experiments with optional filters.
+        This is for when we sweep over experiment-level parameters,
+        such as gsyn and stimulus current.
+
+        Sweep levels:
+            initialization, master_seed
+
+        Experiment levels:
+            condition, sim, pqif, seed
+
+        Additional filters:
+            Any experiment configuration parameter, e.g.
+            gsyn, alpha, dt, current_amplitude.
+        """
+
+        sweep_levels = {"initialization", "master_seed"}
+        experiment_levels = {"condition", "sim", "pqif", "seed"}
+
+        if not names:
+            names = (
+                "initialization", "master_seed",
+                "condition", "sim", "pqif", "seed"
+            )
+
+        unknown = set(names) - sweep_levels - experiment_levels
+        if unknown:
+            raise ValueError(
+                f"Unknown iteration levels: {sorted(unknown)}"
+            )
+
+        experiment_names = [
+            name for name in names if name in experiment_levels
+        ]
+
+        for item in self.experiments:
+            exp = item.exp
+
+            # Apply sweep-level and configuration filters.
+            skip = False
+            experiment_filters = {}
+
+            for key, value in filters.items():
+
+                if key in sweep_levels:
+                    actual = getattr(item, key)
+
+                elif key in experiment_levels or key in exp.conditions.columns:
+                    experiment_filters[key] = value
+                    continue
+
+                elif key in exp.cfg:
+                    actual = exp.cfg[key]
+
+                else:
+                    raise ValueError(f"Unknown filter: {key}")
+
+                if isinstance(actual, (int, float, np.number)):
+                    matches = np.isclose(actual, value)
+                else:
+                    matches = actual == value
+
+                if not matches:
+                    skip = True
+                    break
+
+            if skip:
+                continue
+
+            # Delegate the existing levels to Experiment.
+            for p in exp.iter_params(
+                *experiment_names, **experiment_filters
+            ):
+                result = {
+                    "exp": exp,
+                    "initialization": item.initialization,
+                    "master_seed": item.master_seed,
+                    **vars(p),
+                }
+
+                yield SimpleNamespace(**result)

@@ -5,9 +5,11 @@ Experiment level: one experiment per master_seed.
 Condition level: Cartesian product of amplitude, sigma, and offset.
 Simulation level: F-I-matched configurations for each condition.
 
+
 Run with:
     python main.py
 """
+
 
 from itertools import product
 import time
@@ -19,50 +21,39 @@ from storage import initialize_experiment, experiment_logging
 from fi_matching import find_optimal_vresets, save_fi_plot
 
 def main():
+    # debugging
+    import matplotlib
+    print("Active backend:", matplotlib.get_backend())
     # EXPERIMENT LEVEL
     experiment_settings = [
-        # {
-        #     "master_seed": 7000,
-        #     "N": 500,
-        #     "dt": 0.1,
-        #     "itmax": 1000,
-        #     "nloop": 16,
-        #     "nloop_train": 10,
-        #     "cant_seed": 2,
-        #     "p": 1,
-        #     "pqif_values": [0.0, 0.5, 1.0],
-            # "sequence_amplitudes": (np.linspace(4, 18, 6)).tolist(),
-            # "sequence_sigmas": (np.linspace(7, 11, 6)).tolist(),
-            # "sequence_offsets": (np.linspace(0, 10, 6)).tolist(),
-        #     "number_sequences": 2,
-        #     "sequence_ordering": "random",
-        #     "current_amplitude": 24,
-        #     "parallelize_target_conditions": 1,
-        #     "parallelize_pqif": 3,
-        #     "parallelize_seed": 1,
-        #     "notes": "",
-        # },
         {
-            "master_seed": 1004,
+            "master_seed": 3017,
             "N": 500,
             "dt": 0.1,
             "itmax": 1000,
             "nloop": 16,
             "nloop_train": 10,
-            "cant_seed": 2,
-            "p": 1,
-            "pqif_values": [0.0, 0.5, 1.0],
-            "sequence_amplitudes": (np.linspace(4, 18, 6)).tolist(),
-            "sequence_sigmas": (np.linspace(7, 11, 6)).tolist(),
-            "sequence_offsets": (np.linspace(0, 10, 6)).tolist(),
-            "number_sequences": 2,
+            "cant_seed": 50,
+            "p": 0.3,
+            "sigman": 0.1, 
+            "gsyn": 2.0,
+            "alpha": 0.6,
+            "learning_algorithm": "independent_rls",  # either shared_rls or independent_rls
+            "allow_self_connections": False,
+            "pqif_values": [0, 0.5, 1],
+            "number_sequences": 1,
+            "sequence_amplitudes": (np.linspace(2, 16, 3)).tolist(),
+            "sequence_sigmas": (np.linspace(7, 11, 3)).tolist(),
+            "sequence_offsets": (np.linspace(-10, 2, 3)).tolist(),
             "sequence_ordering": "random",
-            "shared_sequence_order": False, 
+            "shared_sequence_order": True, 
             "current_amplitude": 16,
+            "IEXT_LOW_FRAC": 0.0,
+            "IEXT_HIGH_FRAC": 1.0,
             "parallelize_target_conditions": 1,
-            "parallelize_pqif": 3,
-            "parallelize_seed": 1,
-            "notes": "With the new changes from Martina",
+            "parallelize_pqif": 1,
+            "parallelize_seed": 10,
+            "notes": "Higher alpha and more negative offset",
         },
     ]
 
@@ -103,7 +94,7 @@ def main():
     if len(experiment_names) != len(set(experiment_names)):
         raise ValueError("Duplicate experiment names. Assign distinct master_seed values.")
 
-    # CONDITION LEVEL: PREPARE F-I MATCHING
+    # CONDITION LEVEL: PREPARE FI MATCHING
     fi_cache = {}
     for i, cfg in enumerate(experiments, start=1):
         experiment_dir = initialize_experiment(cfg)

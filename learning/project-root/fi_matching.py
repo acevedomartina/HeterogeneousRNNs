@@ -6,40 +6,123 @@ Therefore, we find the best match per sequence target in order to maintain that
 LIF and QIF is as close as possible on the FI curve.
 
 It also saves the FI curve plot for each time for reference.
+
+
+26.10.26: Adapted to accept negative, but still keep fi matching interval nonnegative.
 """
 
+# import numpy as np
+# import matplotlib.pyplot as plt
+
 import numpy as np
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-def simulate_single_cell(current, neuron_type, vreset=0.0, vt=0.0,
-                         dt=0.1, n_steps=1000, sigman=0.0, seed=0):
+# Changed to be same type of integration (RK2 instead of Euler), noise handling, initial conditions..+
+
+
+def simulate_single_cell(
+    current,
+    neuron_type,
+    vreset=0.0,
+    vt=0.0,
+    dt=0.1,
+    n_steps=1000,
+    sigman=0.0,
+    seed=0,
+):
     rng = np.random.default_rng(seed)
-    x = float(vreset)
+
+    # Same initial-condition distributions as the network.
+    if neuron_type == "QIF":
+        x = rng.uniform(0, 2 * np.pi)
+    elif neuron_type == "LIF":
+        x = rng.uniform(vreset, vt)
+    else:
+        raise ValueError(f"Unknown neuron type: {neuron_type}")
+
     spikes = 0
 
     for _ in range(n_steps):
-        noise = rng.normal() * sigman if sigman > 0 else 0.0
+        # Same noise convention as simulation.py:
+        # one sample per timestep, shared across both RK2 stages.
+        Itot = current + sigman * rng.standard_normal()
 
         if neuron_type == "LIF":
-            dx = -x + current + noise
-            x_new = x + dt * dx
-            if x < vt and x_new > vt:
+            # RK2 midpoint integration
+            dx = -x + Itot
+            xmid = x + dt * dx / 2
+
+            dx = -xmid + Itot
+            xnew = x + dt * dx
+
+            # Same threshold crossing and reset
+            if x < vt and xnew > vt:
                 spikes += 1
-                x_new = vreset
+                xnew = vreset
 
-        elif neuron_type == "QIF":
-            dx = 1 - np.cos(x) + current * (1 + np.cos(x)) + noise
-            x_new = x + dt * dx
-            dpi = (np.pi - (x % (2 * np.pi))) % (2 * np.pi)
-            if x_new - x > dpi:
+        else:  # QIF
+            # RK2 midpoint integration
+            dx = (
+                1 - np.cos(x)
+                + Itot * (1 + np.cos(x))
+            )
+            xmid = x + dt * dx / 2
+
+            dx = (
+                1 - np.cos(xmid)
+                + Itot * (1 + np.cos(xmid))
+            )
+            xnew = x + dt * dx
+
+            # Same phase-pi crossing detection
+            dpi = np.mod(
+                np.pi - np.mod(x, 2 * np.pi),
+                2 * np.pi,
+            )
+            delta_x = xnew - x
+
+            if (delta_x > 0) and (delta_x - dpi > 0):
                 spikes += 1
 
-        else:
-            raise ValueError(f"Unknown neuron type: {neuron_type}")
+            # No reset for QIF neurons
 
-        x = x_new
+        x = xnew
 
     return spikes
+
+
+
+# def simulate_single_cell(current, neuron_type, vreset=0.0, vt=0.0,
+#                          dt=0.1, n_steps=1000, sigman=0.0, seed=0):
+#     rng = np.random.default_rng(seed)
+#     x = float(vreset)
+#     spikes = 0
+
+#     for _ in range(n_steps):
+#         noise = rng.normal() * sigman if sigman > 0 else 0.0
+
+#         if neuron_type == "LIF":
+#             dx = -x + current + noise
+#             x_new = x + dt * dx
+#             if x < vt and x_new > vt:
+#                 spikes += 1
+#                 x_new = vreset
+
+#         elif neuron_type == "QIF":
+#             dx = 1 - np.cos(x) + current * (1 + np.cos(x)) + noise
+#             x_new = x + dt * dx
+#             dpi = (np.pi - (x % (2 * np.pi))) % (2 * np.pi)
+#             if x_new - x > dpi:
+#                 spikes += 1
+
+#         else:
+#             raise ValueError(f"Unknown neuron type: {neuron_type}")
+
+#         x = x_new
+
+#     return spikes
 
 
 def fi_curve(currents, neuron_type, vreset=0.0, vt=0.0,
@@ -115,13 +198,33 @@ def find_optimal_vresets(
     if vreset_values is None:
         vreset_values = np.linspace(-35, -5, 61)
 
-    current_min = max(
-        current_min_floor, current_scale * offset + current_shift
-    )
-    current_max = current_scale * (offset + amplitude) + current_shift
 
-    if current_max <= current_min:
-        raise ValueError("The current interval must have positive width.")
+    # CHANGED HERE
+
+    # current_min = max(
+    #     current_min_floor, current_scale * offset + current_shift
+    # )
+    # current_max = current_scale * (offset + amplitude) + current_shift
+
+    # if current_max <= current_min:
+    #     raise ValueError("The current interval must have positive width.")
+
+
+    # TO:
+
+    # Target-derived current interval
+    raw_min = current_scale * offset + current_shift
+    raw_max = current_scale * (offset + amplitude) + current_shift
+
+    if raw_max <= raw_min:
+        raise ValueError("Amplitude must define a positive current interval.")
+
+    # Preserve the interval width, shifting upward if needed
+    shift = max(0.0, current_min_floor - raw_min)
+
+    current_min = raw_min + shift
+    current_max = raw_max + shift
+        
 
     currents = np.linspace(current_min, current_max, n_currents)
     fit_min = max(current_min, fit_current_min)
