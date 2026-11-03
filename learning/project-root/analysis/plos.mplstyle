@@ -1,0 +1,37 @@
+
+#  PLOS style – custom matplotlib rcParams. This can be imported into 
+# python scripts to use for the figures
+# ------------------------------------------------------------------
+# Fonts – Times, 8‑12 pt
+font.family            : serif
+font.serif             : Times New Roman, Times
+font.size              : 12          # base size
+
+# Axes
+axes.titlesize        : 12
+axes.labelsize        : 12
+axes.labelweight      : normal
+axes.titleweight      : normal
+
+# Ticks
+xtick.labelsize       : 9
+ytick.labelsize       : 9
+xtick.direction       : in
+ytick.direction       : in
+
+# Legends
+legend.fontsize       : 12
+legend.title_fontsize : 12
+legend.loc            : best
+
+# Resolution
+figure.dpi            : 100
+savefig.dpi           : 100
+savefig.bbox          : tight
+
+# Math (no LaTeX)
+text.usetex           : False
+mathtext.fontset      : dejavuserif
+
+# SVG: keep text editable 
+svg.fonttype          : none
