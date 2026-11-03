@@ -23,6 +23,7 @@ learning/project-root/how_to.ipynb
 learning/project-root/tutorial.ipynb
 learning/project-root/results
 learning/project-root/tutorial_im/*
+learning/project-root/main_updated_sweeps.py
 
 learning/project-root/analysis/__pycache__
 learning/project-root/analysis/average_connectivity
@@ -30,4 +31,7 @@ learning/project-root/analysis/connectivity_profiles
 learning/project-root/analysis/analysis_functions.py
 learning/project-root/analysis/results
 
-
+# Analysis
+learning/project-root/analysis/training_quality_*
+learning/project-root/analysis/experiment_sweep.ipynb
+learning/project-root/analysis/connectivity_profiles_*
