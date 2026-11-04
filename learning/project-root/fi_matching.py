@@ -9,6 +9,8 @@ It also saves the FI curve plot for each time for reference.
 
 
 26.10.26: Adapted to accept negative, but still keep fi matching interval nonnegative.
+
+03.11.26: Can now decide between target, experiment, and manual
 """
 
 # import numpy as np
@@ -93,41 +95,10 @@ def simulate_single_cell(
     return spikes
 
 
-
-# def simulate_single_cell(current, neuron_type, vreset=0.0, vt=0.0,
-#                          dt=0.1, n_steps=1000, sigman=0.0, seed=0):
-#     rng = np.random.default_rng(seed)
-#     x = float(vreset)
-#     spikes = 0
-
-#     for _ in range(n_steps):
-#         noise = rng.normal() * sigman if sigman > 0 else 0.0
-
-#         if neuron_type == "LIF":
-#             dx = -x + current + noise
-#             x_new = x + dt * dx
-#             if x < vt and x_new > vt:
-#                 spikes += 1
-#                 x_new = vreset
-
-#         elif neuron_type == "QIF":
-#             dx = 1 - np.cos(x) + current * (1 + np.cos(x)) + noise
-#             x_new = x + dt * dx
-#             dpi = (np.pi - (x % (2 * np.pi))) % (2 * np.pi)
-#             if x_new - x > dpi:
-#                 spikes += 1
-
-#         else:
-#             raise ValueError(f"Unknown neuron type: {neuron_type}")
-
-#         x = x_new
-
-#     return spikes
-
-
 def fi_curve(currents, neuron_type, vreset=0.0, vt=0.0,
              dt=0.1, n_steps=1000, sigman=0.0):
-    simulation_seconds = n_steps / 1000
+    # simulation_seconds = n_steps / 1000
+    simulation_seconds = n_steps * dt / 1000  # works for any dt
 
     return np.array([
         simulate_single_cell(
@@ -138,7 +109,8 @@ def fi_curve(currents, neuron_type, vreset=0.0, vt=0.0,
     ])
 
 
-def fit_fi_gain(currents, rates, fit_min=0.7, fit_max=None, min_fit_points=5):
+def fit_fi_gain(currents, rates, fit_min=0.0, fit_max=None, min_fit_points=5):
+    """Fit a linear gain over the specified current interval."""
     mask = currents >= fit_min
 
     if fit_max is not None:
@@ -187,55 +159,38 @@ def find_optimal_vresets(
     n_steps=1000,
     sigman=0.0,
     n_currents=50,
-    fit_current_min=0.7,
+    fit_current_min=0.0,
     fit_current_max=None,
     current_scale=1.0,
     current_shift=0.0,
     current_min_floor=0.0,
 ):
-    """Find optimal LIF reset voltages over the target-derived current range."""
+    """Find optimal LIF reset voltages over the target-derived current range or from a set min to max value."""
 
     if vreset_values is None:
         vreset_values = np.linspace(-35, -5, 61)
 
+    # Defining current range
 
-    # CHANGED HERE
-
-    # current_min = max(
-    #     current_min_floor, current_scale * offset + current_shift
-    # )
-    # current_max = current_scale * (offset + amplitude) + current_shift
-
-    # if current_max <= current_min:
-    #     raise ValueError("The current interval must have positive width.")
-
-
-    # TO:
-
-    # Target-derived current interval
     raw_min = current_scale * offset + current_shift
     raw_max = current_scale * (offset + amplitude) + current_shift
 
     if raw_max <= raw_min:
         raise ValueError("Amplitude must define a positive current interval.")
 
-    # Preserve the interval width, shifting upward if needed
     shift = max(0.0, current_min_floor - raw_min)
-
-    current_min = raw_min + shift
+    current_min = max(raw_min + shift, fit_current_min)
     current_max = raw_max + shift
-        
-
-    currents = np.linspace(current_min, current_max, n_currents)
-    fit_min = max(current_min, fit_current_min)
 
     if fit_current_max is not None:
-        fit_max = min(current_max, fit_current_max)
-    else:
-        fit_max = current_max
+        current_max = min(current_max, fit_current_max)
 
-    if fit_min >= fit_max:
-        raise ValueError("No valid current interval for fitting the gain.")
+    if current_max <= current_min:
+        raise ValueError("No valid current interval for F-I matching.")
+
+    currents = np.linspace(current_min, current_max, n_currents)
+    fit_min = current_min
+    fit_max = current_max
 
     simulation_args = {
         "vt": vt,

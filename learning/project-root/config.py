@@ -60,6 +60,11 @@ class Config:
     learning_algorithm: str = "independent_rls"  # or shared_rls
     allow_self_connections: bool = False
 
+    # F-I matching
+    vreset_mode: str = "target"
+    matching_rules: list[str] = field(default_factory=lambda: ["overlap"])
+    fi_settings: dict[str, Any] = field(default_factory=dict)
+
     
     # Oscillation targets
     
@@ -245,6 +250,10 @@ class Config:
             raise ValueError(
                 "shared_rls currently requires p=1.0"
             )
+        if self.vreset_mode not in {"target", "experiment", "manual"}:
+            raise ValueError("Invalid vreset_mode")
+        if not self.matching_rules or any(rule not in {"overlap", "gain"} for rule in self.matching_rules):
+            raise ValueError("matching_rules must contain 'overlap' and/or 'gain'")
 
     def to_metadata(self) -> dict[str, Any]:
         """JSON-serializable snapshot of all parameters and derived settings."""
