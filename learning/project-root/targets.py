@@ -112,6 +112,11 @@ def generate_sequences_target(amplitude, sigma, offset, cfg, rng):
         "sequence_duration": np.full(N, sequence_duration),
     })
 
+    if getattr(cfg, "reverse_sequence", False):  # if not defined, defaults to False
+        target = target[::-1, :]
+        parameters["sequence_position"] = parameters["sequence_position"].to_numpy()[::-1]
+        parameters["peak_time"] = parameters["peak_time"].to_numpy()[::-1]
+
     return target, parameters, target_time
 
 

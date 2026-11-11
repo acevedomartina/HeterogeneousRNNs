@@ -73,6 +73,8 @@ class Config:
 
     
     # Sequence targets
+
+    reverse_sequence: bool = False
     
     number_sequences: int = 1
     sequence_amplitudes: list[float] = field(
