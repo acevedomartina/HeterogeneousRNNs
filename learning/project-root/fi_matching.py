@@ -1,27 +1,65 @@
 
 """
 Find LIF reset voltages matching the QIF f-I curve or gain.
-For difference sequence parameters, the input current range is quite different.
-Therefore, we find the best match per sequence target in order to maintain that
-LIF and QIF is as close as possible on the FI curve.
+For different sequence parameters, the input current range is quite different.
+Therefore, we find the best match per sequence target to keep the LIF and QIF
+f-I curves as close as possible.
 
-It also saves the FI curve plot for each time for reference.
-
-
-26.10.26: Adapted to accept negative, but still keep fi matching interval nonnegative.
-
-03.11.26: Can now decide between target, experiment, and manual
+The function also saves an f-I curve plot for reference.
 """
-
-# import numpy as np
-# import matplotlib.pyplot as plt
 
 import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-# Changed to be same type of integration (RK2 instead of Euler), noise handling, initial conditions..+
+
+def lif_exact_freq(I, vrest, vt, tau_m=1.0):
+    """Compute the exact analytical firing rate (Hz) for the LIF model (dx/dt = -x + I).
+
+    Parameters:
+    -----------
+    I : float or np.ndarray
+        Injected current.
+    vrest : float
+        Resting / reset voltage.
+    vt : float
+        Threshold voltage.
+    tau_m : float
+        Membrane time constant (ms).
+    """
+    I = np.asarray(I, dtype=float)
+    freqs = np.zeros_like(I)
+    mask = I > vt
+
+    if np.any(mask):
+        I_v = I[mask]
+        num = I_v - vrest
+        den = I_v - vt
+        t_isi = tau_m * np.log(num / den)  # ISI in ms
+        freqs[mask] = 1000.0 / t_isi  # Firing rate in Hz
+
+    return freqs
+
+
+def qif_exact_freq(I, tau_m=1.0):
+    """Compute the exact analytical firing rate (Hz) for the QIF / Theta model.
+
+    Parameters:
+    -----------
+    I : float or np.ndarray
+        Injected current.
+    tau_m : float
+        Membrane time constant (ms).
+    """
+    I = np.asarray(I, dtype=float)
+    freqs = np.zeros_like(I)
+    mask = I > 0.0
+
+    if np.any(mask):
+        freqs[mask] = (1000.0 * np.sqrt(I[mask])) / (np.pi * tau_m)
+
+    return freqs
 
 
 def simulate_single_cell(
@@ -97,8 +135,7 @@ def simulate_single_cell(
 
 def fi_curve(currents, neuron_type, vreset=0.0, vt=0.0,
              dt=0.1, n_steps=1000, sigman=0.0):
-    # simulation_seconds = n_steps / 1000
-    simulation_seconds = n_steps * dt / 1000  # works for any dt
+    simulation_seconds = n_steps * dt / 1000
 
     return np.array([
         simulate_single_cell(
@@ -109,7 +146,7 @@ def fi_curve(currents, neuron_type, vreset=0.0, vt=0.0,
     ])
 
 
-def fit_fi_gain(currents, rates, fit_min=0.0, fit_max=None, min_fit_points=5):
+def fit_fi_gain(currents, rates, fit_min=0, fit_max=None, min_fit_points=5):
     """Fit a linear gain over the specified current interval."""
     mask = currents >= fit_min
 
@@ -164,8 +201,9 @@ def find_optimal_vresets(
     current_scale=1.0,
     current_shift=0.0,
     current_min_floor=0.0,
+    theorical=True,
 ):
-    """Find optimal LIF reset voltages over the target-derived current range or from a set min to max value."""
+    """Find optimal LIF reset voltages using theoretical or simulated f-I curves."""
 
     if vreset_values is None:
         vreset_values = np.linspace(-35, -5, 61)
@@ -179,18 +217,18 @@ def find_optimal_vresets(
         raise ValueError("Amplitude must define a positive current interval.")
 
     shift = max(0.0, current_min_floor - raw_min)
-    current_min = max(raw_min + shift, fit_current_min)
+    current_min = raw_min + shift
     current_max = raw_max + shift
 
+    fit_min = max(current_min, fit_current_min)
     if fit_current_max is not None:
         current_max = min(current_max, fit_current_max)
+    fit_max = current_max
 
-    if current_max <= current_min:
-        raise ValueError("No valid current interval for F-I matching.")
+    if fit_min >= fit_max:
+        raise ValueError("No valid current interval for fitting the gain.")
 
     currents = np.linspace(current_min, current_max, n_currents)
-    fit_min = current_min
-    fit_max = current_max
 
     simulation_args = {
         "vt": vt,
@@ -199,7 +237,10 @@ def find_optimal_vresets(
         "sigman": sigman,
     }
 
-    qif_rates = fi_curve(currents, "QIF", **simulation_args)
+    qif_simulation_rates = fi_curve(currents, "QIF", **simulation_args)
+    qif_theory_rates = qif_exact_freq(currents)
+    qif_rates = qif_theory_rates if theorical else qif_simulation_rates
+
     qif_fit = fit_fi_gain(
         currents, qif_rates, fit_min=fit_min, fit_max=fit_max
     )
@@ -207,9 +248,16 @@ def find_optimal_vresets(
     candidates = []
 
     for vreset in vreset_values:
-        lif_rates = fi_curve(
+        lif_simulation_rates = fi_curve(
             currents, "LIF", vreset=float(vreset), **simulation_args
         )
+        lif_theory_rates = lif_exact_freq(
+            currents,
+            vrest=float(vreset),
+            vt=vt,
+        )
+        lif_rates = lif_theory_rates if theorical else lif_simulation_rates
+
         lif_fit = fit_fi_gain(
             currents, lif_rates, fit_min=fit_min, fit_max=fit_max
         )
@@ -218,6 +266,12 @@ def find_optimal_vresets(
             name: rule(lif_rates, qif_rates, lif_fit, qif_fit)
             for name, rule in comparison_rules.items()
         }
+        errors["overlap_simulation"] = overlap_error(
+            lif_simulation_rates, qif_simulation_rates, None, None
+        )
+        errors["overlap_theorical"] = overlap_error(
+            lif_theory_rates, qif_theory_rates, None, None
+        )
 
         candidates.append({
             "vreset": float(vreset),
@@ -237,7 +291,21 @@ def find_optimal_vresets(
         "qif_gain": qif_fit["gain"],
         "qif_gain_err": qif_fit["gain_err"],
         "qif_fit_r2": qif_fit["r2"],
+        "theorical": bool(theorical),
     }
+
+    best_simulation_overlap = min(
+        candidates,
+        key=lambda item: item["errors"]["overlap_simulation"],
+    )
+    best_theory_overlap = min(
+        candidates,
+        key=lambda item: item["errors"]["overlap_theorical"],
+    )
+    result["best_vreset_overlap_simulation"] = best_simulation_overlap["vreset"]
+    result["error_overlap_simulation"] = best_simulation_overlap["errors"]["overlap_simulation"]
+    result["best_vreset_overlap_theorical"] = best_theory_overlap["vreset"]
+    result["error_overlap_theorical"] = best_theory_overlap["errors"]["overlap_theorical"]
 
     for name in comparison_rules:
         best = min(
@@ -267,19 +335,92 @@ def save_fi_plot(fi_result, configs, labels, fi_settings, save_path):
         "sigman": fi_settings["sigman"],
     }
 
+    theory_currents = np.linspace(
+        fi_result["current_min"],
+        fi_result["current_max"],
+        max(500, len(currents)),
+    )
+
     fig, ax = plt.subplots(figsize=(6, 4))
     qif_rates = fi_curve(currents, "QIF", **simulation_args)
-    ax.plot(currents, qif_rates, color="black", linewidth=2, label="QIF")
+    ax.plot(
+        currents, qif_rates, color="black", linewidth=2, label="QIF (simulation)"
+    )
+    ax.plot(
+        theory_currents,
+        qif_exact_freq(theory_currents),
+        color="black",
+        linestyle="--",
+        linewidth=1.8,
+        label="QIF (theory)",
+    )
+
+    simulation_vreset = fi_result["best_vreset_overlap_simulation"]
+    simulation_lif_rates = fi_curve(
+        currents, "LIF", vreset=simulation_vreset, **simulation_args
+    )
+    ax.plot(
+        currents,
+        simulation_lif_rates,
+        color="tab:blue",
+        linewidth=1.8,
+        label=f"LIF (simulation overlap, Vreset={simulation_vreset:.2f})",
+    )
+
+    theory_vreset = fi_result["best_vreset_overlap_theorical"]
+    theory_lif_rates = lif_exact_freq(
+        theory_currents,
+        vrest=theory_vreset,
+        vt=fi_settings["vt"],
+    )
+    ax.plot(
+        theory_currents,
+        theory_lif_rates,
+        color="tab:orange",
+        linestyle="--",
+        linewidth=1.8,
+        label=f"LIF (theory overlap, Vreset={theory_vreset:.2f})",
+    )
 
     for label, config in zip(labels, configs):
+        if label == "overlap":
+            continue
         lif_rates = fi_curve(
             currents, "LIF", vreset=config["vreset"],
             **{**simulation_args, "vt": config["vt"]},
         )
-        ax.plot(
+        lif_line, = ax.plot(
             currents, lif_rates, linewidth=1.8,
-            label=f"LIF ({label}, Vreset={config['vreset']:.2f})",
+            label=f"LIF ({label}, Vreset={config['vreset']:.2f}, simulation)",
         )
+        ax.plot(
+            theory_currents,
+            lif_exact_freq(
+                theory_currents,
+                vrest=config["vreset"],
+                vt=config["vt"],
+            ),
+            color=lif_line.get_color(),
+            linestyle="--",
+            linewidth=1.8,
+            label=f"LIF ({label}, Vreset={config['vreset']:.2f}, theory)",
+        )
+
+    overlap_summary = (
+        f"Simulation MSE={fi_result['error_overlap_simulation']:.4g} "
+        f"(Vr={simulation_vreset:.2f})\n"
+        f"Theory MSE={fi_result['error_overlap_theorical']:.4g} "
+        f"(Vr={theory_vreset:.2f})"
+    )
+    ax.text(
+        0.02,
+        0.98,
+        overlap_summary,
+        transform=ax.transAxes,
+        va="top",
+        fontsize=8,
+        bbox={"facecolor": "white", "alpha": 0.8, "edgecolor": "none"},
+    )
 
     ax.axvspan(
         fi_result["fit_min"], fi_result["fit_max"],
@@ -295,3 +436,4 @@ def save_fi_plot(fi_result, configs, labels, fi_settings, save_path):
     fig.tight_layout()
     fig.savefig(save_path, bbox_inches="tight")
     plt.close(fig)
+
