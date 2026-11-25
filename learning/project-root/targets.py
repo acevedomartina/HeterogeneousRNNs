@@ -98,7 +98,7 @@ def generate_sequences_target(amplitude, sigma, offset, cfg, rng):
         % sequence_duration - sequence_duration / 2
     )
 
-    target = offset + amplitude * np.exp(
+    target = offset + (amplitude-offset) * np.exp(
         -(time_distance ** 2) / (2 * sigma ** 2)
     )
 
